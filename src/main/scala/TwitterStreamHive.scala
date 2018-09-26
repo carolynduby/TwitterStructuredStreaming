@@ -55,16 +55,19 @@ val simplified_tweet_schema = new StructType()
    val rawTweets =  kafka.select(from_json(col("value").cast("string"), simplified_tweet_schema).alias("parsed_value"))
    
 
-   val query = rawTweets.select(col("parsed_value.twitter_retweet_count").alias("retweet_count"), 
+   val query = rawTweets.select(col("parsed_value.twitter_retweet_count").cast("int").alias("retweet_count"), 
                                 col("parsed_value.twitter_screen_name").alias("screen_name"), 
                                 col("parsed_value.twitter_text").alias("text"), 
-                                col("parsed_value.twitter_created_at").alias("created_at"), 
+                                to_timestamp(col("parsed_value.twitter_created_at"), "EEE MMM d hh:mm:ss +SSSS yyyy").alias("created_at"), 
                                 col("parsed_value.twitter_full_text").alias("full_text"), 
-                                col("parsed_value.twitter_latitude").alias("latitude"), 
-                                col("parsed_value.twitter_longitude").alias("longitude"), 
+                                col("parsed_value.twitter_latitude").cast("int").alias("latitude"), 
+                                col("parsed_value.twitter_longitude").cast("int").alias("longitude"), 
                                 col("parsed_value.twitter_hashtags").alias("hashtags"))
                    .writeStream
                    .trigger(Trigger.ProcessingTime("2 seconds"))
+//                   .format("console")
+//                   .start 
+
                    .format("orc")
                    .option("checkpointLocation", "hdfs://localhost:8020/user/spark/twitterStreamHive/checkpoint")
                    .option("path", "s3a://cdubytwitter/orc")
