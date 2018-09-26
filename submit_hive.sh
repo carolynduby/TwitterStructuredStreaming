@@ -1,0 +1,1 @@
+/usr/hdp/2.6.5.0-292/spark2/bin/spark-submit --class example.TwitterStreamHive --master yarn-client --num-executors 1 --driver-memory 512m --executor-memory 512m --executor-cores 1 build/twitterStream.jar --properties-file spark-defaults.conf 
