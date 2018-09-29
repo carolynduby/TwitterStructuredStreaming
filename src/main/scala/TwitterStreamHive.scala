@@ -22,23 +22,11 @@ object TwitterStreamHive extends TwitterStreamingHiveSparkApp with App {
    val kafka = spark
                .readStream
                .format("kafka")
-               .option("kafka.bootstrap.servers", "localhost:6667")
+               .option("kafka.bootstrap.servers", "ip-172-31-8-21.eu-west-2.compute.internal:6667")
                .option("subscribe", "simple_tweets")
                .load()
    
    kafka.printSchema()
-
-   /*val simplified_tweet_schema = new StructType()
-                   .add("twitter_created_at", StringType)
-                   .add("twitter_text", StringType)
-                   .add("twitter_lang", StringType)
-                   .add("twitter_full_text", StringType)
-                   .add("twitter_longitude", IntegerType) 
-                   .add("twitter_latitude", IntegerType)
-                   .add("twitter_screen_name", StringType)
-                   .add("twitter_hashtags", ArrayType(StringType))
-                   .add("twitter_retweet_count", IntegerType)  
-*/
 
 val simplified_tweet_schema = new StructType()
                    .add("twitter_created_at", StringType)
@@ -51,14 +39,13 @@ val simplified_tweet_schema = new StructType()
                    .add("twitter_hashtags", StringType)
                    .add("twitter_retweet_count", StringType)
 
-   //val rawTweets =  kafka.select(from_json(col("value").cast("string"), simplified_tweet_schema))
    val rawTweets =  kafka.select(from_json(col("value").cast("string"), simplified_tweet_schema).alias("parsed_value"))
    
 
    val query = rawTweets.select(col("parsed_value.twitter_retweet_count").cast("int").alias("retweet_count"), 
                                 col("parsed_value.twitter_screen_name").alias("screen_name"), 
                                 col("parsed_value.twitter_text").alias("text"), 
-                                to_timestamp(col("parsed_value.twitter_created_at"), "EEE MMM d hh:mm:ss +SSSS yyyy").alias("created_at"), 
+                                to_timestamp(col("parsed_value.twitter_created_at"), "EEE MMM dd kk:mm:ss +SSSS yyyy").alias("created_at"), 
                                 col("parsed_value.twitter_full_text").alias("full_text"), 
                                 col("parsed_value.twitter_latitude").cast("int").alias("latitude"), 
                                 col("parsed_value.twitter_longitude").cast("int").alias("longitude"), 
@@ -69,11 +56,41 @@ val simplified_tweet_schema = new StructType()
 //                   .start 
 
                    .format("orc")
-                   .option("checkpointLocation", "hdfs://localhost:8020/user/spark/twitterStreamHive/checkpoint")
-                   .option("path", "s3a://cdubytwitter/orc")
+                   .option("checkpointLocation", "hdfs://ip-172-31-8-21:8020/user/spark/twitterStreamHive/checkpoint")
+                   .option("path", "s3a://cdubytwitterlondon/orc")
                    .start()
 
-    query.awaitTermination() 
+     val split_json_array = udf((json_array: String) => {
+                      json_array.substring(1, json_array.length - 1).split(",").map(_.trim)
+                      })
+
+   /*  val trim_string = udf((raw_string: String) => {
+                          if (raw_string.trim.length() == 0) {
+                              lit(null:String)
+                          } else {
+                              raw_string
+                          }
+                      })*/
+
+   val druid_query = rawTweets.select(col("parsed_value.twitter_retweet_count").cast("int").alias("retweet_count"),
+                                col("parsed_value.twitter_screen_name").alias("screen_name"),
+                                col("parsed_value.twitter_text").alias("text"),
+                                to_timestamp(col("parsed_value.twitter_created_at"), "EEE MMM dd kk:mm:ss +SSSS yyyy").alias("created_at"),
+                                col("parsed_value.twitter_full_text").alias("full_text"),
+                                col("parsed_value.twitter_latitude").cast("int").alias("latitude"),
+                                col("parsed_value.twitter_longitude").cast("int").alias("longitude"),
+                                col("parsed_value.twitter_hashtags").alias("hashtags"))
+                   .withColumn("hashtags", split_json_array($"hashtags"))
+                   .withColumn("hashtags", explode($"hashtags"))
+                   .filter(length($"hashtags") > 0 )
+                   .writeStream
+                   .trigger(Trigger.ProcessingTime("2 seconds"))
+                   .format("orc")
+                   .option("checkpointLocation", "hdfs://ip-172-31-8-21:8020/user/spark/twitterStreamHive/checkpoint/hashtags")
+                   .option("path", "s3a://cdubytwitterlondon/orc/hashtags")
+                   .start
+
+    spark.streams.awaitAnyTermination() 
 
 }
 

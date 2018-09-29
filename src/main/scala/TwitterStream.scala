@@ -20,7 +20,7 @@ object TwitterStream extends TwitterStreamingSparkApp with App {
    val kafka = spark
                .readStream
                .format("kafka")
-               .option("kafka.bootstrap.servers", "localhost:6667")
+               .option("kafka.bootstrap.servers", "ip-172-31-8-21.eu-west-2.compute.internal:6667")
                .option("subscribe", "tweets")
                .load()
 
@@ -32,8 +32,8 @@ object TwitterStream extends TwitterStreamingSparkApp with App {
     val query = rawTweets.writeStream
                    .format("text")
                    .trigger(Trigger.ProcessingTime("2 seconds"))
-                   .option("checkpointLocation", "hdfs://localhost:8020/user/spark/twitterStream/checkpoint")
-                   .option("path", "s3a://cdubytwitter/raw")
+                   .option("checkpointLocation", "hdfs://ip-172-31-8-21.eu-west-2.compute.internal:8020/user/spark/twitterStream/checkpoint")
+                   .option("path", "s3a://cdubytwitterlondon/raw")
                    .start() 
 
     query.awaitTermination() 
